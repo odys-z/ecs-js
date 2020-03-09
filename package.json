@@ -8,7 +8,7 @@
     "/src"
   ],
   "scripts": {
-    "test": "lab -a \"@hapi/code\" -cv tests --coverage-exclude tests"
+    "test": "lab -a \"@hapi/code\" -cv tests/sys-query.js --coverage-exclude tests"
   },
   "repository": {
     "type": "git",

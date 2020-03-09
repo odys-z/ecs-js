@@ -1,6 +1,7 @@
 const UUID = require('uuid/v1');
 const BaseComponent = require('./component');
 const Entity = require('./entity');
+debugger
 const QueryCache = require('./querycache');
 
 const componentMethods = new Set(['stringify', 'clone', 'getObject', Symbol.iterator]);

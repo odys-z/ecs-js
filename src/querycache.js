@@ -9,6 +9,7 @@ class QueryCache {
     this.iffall = iffall;
     // set results as set of entities subscribed by System.query,
     // e.g results = [entitye{ id = 'xview'}] by CamCtrl.query = [has['UserCmd', 'CmdFlag']]
+    debugger
     this.results = this._initial();
   }
 
@@ -149,10 +150,8 @@ class QueryCache {
             break;
           }
         }
-      }
     }
 
-    // has (logical error here?)
     let foundHas = true;
     if (!foundAny && !foundIffall) {
         for (const cname of this.has) {
