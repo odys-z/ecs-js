@@ -27,6 +27,11 @@ class ECS {
     return this.ticks;
   }
 
+  // Change Log: add function
+  get getick() {
+	  return this.ticks;
+  }
+
   addRef(target, entity, component, prop, sub) {
     if (!this.refs[target]) {
       this.refs[target] = new Set();
@@ -93,10 +98,18 @@ class ECS {
   }
 
   queryEntities(args) {
-
-    const { has, hasnt, persist, updatedValues, updatedComponents } = Object.assign({
-      has: [],
+    /* e.g. args = {persist: CamCtrl, has: Array(2)}
+	 has = (2) ["UserCmd", "CmdFlag"],
+	 hasnt = [],
+	 persist = CamCtrl {ecs: ECS, changes: Array(0), lastTick: 0},
+	 updatedValues = 0, updatedComponents = 0
+     */
+    // branch ANY (and IFFALL)
+    const { hasnt, has, iffall, any, persist, updatedValues, updatedComponents } = Object.assign({
       hasnt: [],
+      has: [],
+      iffall: [],
+      any: [],
       persist: false,
       updatedValues: 0,
       updatedComponents: 0
@@ -107,7 +120,8 @@ class ECS {
       query = this.queryCache.get(persist);
     }
     if (!query) {
-      query = new QueryCache(this, has, hasnt);
+	  // Change Log: branch ANY, IFFALL
+      query = new QueryCache(this, has, hasnt, any, iffall);
     }
     if (persist) {
       this.queryCache.set(persist, query);
@@ -148,7 +162,7 @@ class ECS {
       if (this.queryCache.has(system)) {
         entities = this.queryCache.get(system).filter();
       }
-      system.update(this.ticks, entities);
+      system.update(this.ticks, entities ? entities : []);
       system.lastTick = this.ticks;
       if (system.changes.length !== 0) {
         system.changes = [];

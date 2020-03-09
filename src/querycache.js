@@ -1,18 +1,23 @@
 class QueryCache {
 
-  constructor (ecs, has, hasnt) {
-
+  // branch ANY
+  constructor (ecs, has, hasnt, any, iffall) {
     this.ecs = ecs;
     this.has = has;
     this.hasnt = hasnt;
+    this.any = any;
+    this.iffall = iffall;
+    // set results as set of entities subscribed by System.query,
+    // e.g results = [entitye{ id = 'xview'}] by CamCtrl.query = [has['UserCmd', 'CmdFlag']]
     this.results = this._initial();
   }
 
+  // Change Log: branch ANY, IFFALL
   _initial() {
-
-    if (this.has.length === 1 && this.hasnt.length === 0) {
+    if (this.has.length === 1
+        && this.iffall.length === 0 && this.any.length === 0 && this.hasnt.length === 0) {
       const entities = new Set();
-      if (this.ecs.components.has(this.has[0])) {
+      if (this.ecs.getComponents(this.has[0])) {
         for (const component of this.ecs.getComponents(this.has[0])) {
           entities.add(component.entity);
         }
@@ -24,8 +29,9 @@ class QueryCache {
       }
       return entities;
     }
+
+    // has (all)
     const hasSet = [];
-    const hasntSet = [];
     for (const cname of this.has) {
       if (this.ecs.entityComponents.has(cname)) {
         hasSet.push(this.ecs.entityComponents.get(cname));
@@ -37,16 +43,13 @@ class QueryCache {
     hasSet.sort((a, b) => {
       return a.size - b.size;
     });
-    for (const cname of this.hasnt) {
-      if (this.ecs.entityComponents.has(cname)) {
-        hasntSet.push(this.ecs.entityComponents.get(cname));
-      }
-      if (this.ecs.entityTags.has(cname)) {
-        hasntSet.push(this.ecs.entityTags.get(cname));
-      }
-    }
 
-    const results = new Set([...hasSet[0]]);
+    // results is a set of Entities Ids (mapped later)
+    let results; //  = new Set();
+    if (hasSet && hasSet.length > 0) {
+        results = new Set([...hasSet[0]]);
+    }
+    else results = new Set();
     for (let idx = 1, l = hasSet.length; idx < l; idx++) {
       const intersect = hasSet[idx];
       for (const id of results) {
@@ -54,6 +57,43 @@ class QueryCache {
           results.delete(id);
         }
       }
+    }
+
+    // iffall (contains)
+    let iffSet; // = new Set();
+    let iffname;
+    for (const cname of this.iffall) {
+      // Debug Note: the set must been cloned - some of iffSet will be deleted later
+      iffSet = new Set(this.ecs.entityComponents.get(cname));
+      iffname = cname;
+      break;
+    }
+    for (const cname of this.iffall) {
+      if (cname === iffname)
+        continue;
+      const intersect = this.ecs.entityComponents.get(cname);
+      for (const id of iffSet) {    // id = EntityId.id, e.g. 'htmltex-0'
+        if (!intersect.has(id)) {
+          iffSet.delete(id);
+        }
+      }
+    }
+    if (iffSet) for (var el of iffSet) results.add(el);
+
+    // any
+    for (const cname of this.any) {
+        var c = this.ecs.entityComponents.get(cname);
+        // sometimes the user provided names is broken
+        if (c === undefined || !(Symbol.iterator in Object(c)))
+            continue;
+        for (const e of c)
+            results.add(e);
+    }
+
+    // hasn't
+    const hasntSet = [];
+    for (const cname of this.hasnt) {
+      hasntSet.push(this.ecs.entityComponents.get(cname));
     }
     for (const id of results) {
       for (const diff of hasntSet) {
@@ -70,50 +110,74 @@ class QueryCache {
     );
   }
 
+  /** Check entity's components, update this cache's entity set (this.results),
+   * according to conditions like 'has', 'any', ...
+   *
+   * Logics of has, iff, any, hasnt:
+   * result = (has || iff || any) && !hasnt
+   * see doc/ecs/query-details.ods
+   *
+   * @param {Entity} entity
+   */
   updateEntity(entity) {
 
     const id = entity.id;
-    let found = true;
-    for (const cname of this.has) {
-      if (this.ecs.entityComponents.has(cname)) {
-        const hasSet = this.ecs.entityComponents.get(cname);
-        if (!hasSet.has(id)) {
-          found = false;
-          break;
+    // any
+    let foundAny = false;
+    const anySet = new Set();
+    for (const cname of this.any) {
+        const anyEnts = this.ecs.entityComponents.get(cname);
+        // sometimes the user provided names is broken
+        if (anyEnts === undefined || !(Symbol.iterator in Object(anyEnts)))
+            continue;
+        for (const ae in anyEnts) {
+            if (anyEnts.has(id)) {
+                foundAny = true;
+                break;
+            }
         }
-      }
-      if (this.ecs.entityTags.has(cname)) {
-        const hasTag = this.ecs.entityTags.get(cname);
-        if (!hasTag.has(id)) {
-          found = false;
-          break;
+        if (foundAny) break;
+    }
+
+    // iffall
+    let foundIffall = true;
+    if (!foundAny) {
+        for (const cname of this.iffall) {
+          const iffSet = this.ecs.entityComponents.get(cname);
+          if (!iffSet.has(id)) {
+            foundIffall = false;
+            break;
+          }
         }
       }
     }
 
-    if (!found) {
+    // has (logical error here?)
+    let foundHas = true;
+    if (!foundAny && !foundIffall) {
+        for (const cname of this.has) {
+          const hasSet = this.ecs.entityComponents.get(cname);
+          if (!hasSet.has(id)) {
+            foundHas = false;
+            break;
+          }
+        }
+    }
+
+    if ( !foundAny && !foundHas && !foundIffall ) {
       this.results.delete(entity);
       return;
     }
 
-    found = false;
+    let foundHasnt = false;
     for (const cname of this.hasnt) {
-      if (this.ecs.entityComponents.has(cname)) {
-        const hasntSet = this.ecs.entityComponents.get(cname);
-        if (hasntSet.has(id)) {
-          found = true;
-          break;
-        }
-      }
-      if (this.ecs.entityTags.has(cname)) {
-        const hasntSet = this.ecs.entityTags.get(cname);
-        if (hasntSet.has(id)) {
-          found = true;
-          break;
-        }
+      const hasntSet = this.ecs.entityComponents.get(cname);
+      if (hasntSet.has(id)) {
+        foundHasnt = true;
+        break;
       }
     }
-    if (found) {
+    if (foundHasnt) {
       this.results.delete(entity);
       return;
     }

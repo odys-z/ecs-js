@@ -15,19 +15,64 @@ lab.experiment('System.query', () => {
     }
   });
 
-  lab.before(({ context }) => {
-
+  ecs.registerComponent('Speed', {
+    properties: {
+      v: [0, 0, 0],
+      a: [0, -9.8, 0],
+    }
   });
 
-  lab.test('has', () => {
+  lab.before(({ context }) => {
+  });
+
+  lab.test('has ["Health", "Speed"]', () => {
+    var flag1 = false;
+	var flag2 = false;
+    class HasHealth extends ECS.System {
+		update(tick, entities) {
+			if (entities.length === 1)
+				for (var e of entities) {
+					if (e.id === 'health') {
+						flag1 = true;
+						break;
+					}
+				}
+		}
+	}
+	HasHealth.query = {has: ['Health']}
+
+    class HasBoth extends ECS.System {
+		update(tick, entities) {
+			if (entities.length === 1)
+				for (var e of entities) {
+					if (e.id === 'both') {
+						flag2 = true;
+						break;
+					}
+				}
+		}
+	}
+	HasHealth.query = {has: ['Health', 'Speed']}
+
+    ecs.addSystem('has', new HasHealth);
+    ecs.addSystem('has', new HasBoth);
+    ecs.runSystemGroup('has');
 
     ecs.createEntity({
+	  id: 'health',
       Health: [ { hp: 10 } ]
     });
 
-    const results = ecs.queryEntities({ has: ['Health'] });
+    ecs.createEntity({
+	  id: 'both',
+      Health: [ { hp: 10 } ],
+	  Speed: {}
+    });
 
+    const results = ecs.queryEntities({ has: ['Health'] });
     expect(results.size).to.equal(1);
+    expect(flag1).to.equal(True);
+    expect(flag2).to.equal(True);
   });
 
 });
